@@ -11,7 +11,9 @@ window.addEventListener('DOMContentLoaded', function () {
         allLists = document.querySelectorAll('.dropdown-lists__list'),
         defaultCountryList = document.querySelector('.dropdown-lists__list--default'),
         allCountryCities = document.querySelector('.dropdown-lists__list--select'),
-        autoCompleteElement = document.querySelector('.dropdown-lists__list--autocomplete');
+        autoCompleteElement = document.querySelector('.dropdown-lists__list--autocomplete'),
+        mainSection = document.querySelector('.main'),
+        dropDown = document.querySelector('.dropdown');
 
 
     class City {
@@ -28,6 +30,13 @@ window.addEventListener('DOMContentLoaded', function () {
         getCityBD(mode, country, searchString) {
             this.citiesBuf = [];
 
+            const statusMessage = document.createElement('div');
+            statusMessage.style.cssText = 'font-size: 2rem';
+            statusMessage.style.color = '#FFFFFF';
+            statusMessage.style.marginTop = '30px';
+            statusMessage.classList.add('loader');
+            button.appendChild(statusMessage);
+          
             const fetchPromise = fetch('./db_cities.json', {mode: 'cors'});
             fetchPromise.then(response => {
                 if (response.status !== 200) {
@@ -36,6 +45,7 @@ window.addEventListener('DOMContentLoaded', function () {
                 return response.json();
               }).then(cities => {
                 this.citiesArray = cities.RU;
+                setTimeout(() => {statusMessage.classList.remove('loader');}, 100);
 
                 // заполняем массив со всеми странами/городами
                 this.citiesArray.forEach((item, itemIndex) => {
@@ -66,7 +76,7 @@ window.addEventListener('DOMContentLoaded', function () {
                 if (this.cityOutputMode === 'default' || this.cityOutputMode === 'select') {
                     this.fillCountryList(this.citiesArray);
                 } else {
-                    this.fillCountryList(this.citiesBuf);
+                    this.fillCountryList(this.citiesBuf, searchString);
                 }
               });
         }
@@ -81,7 +91,7 @@ window.addEventListener('DOMContentLoaded', function () {
         }
 
         // процедура отрисовки элементов
-        fillCountryList(data) {
+        fillCountryList(data, searchString) {
             this.clearLists();
             let elementForAppendChilds = '';
 
@@ -127,8 +137,38 @@ window.addEventListener('DOMContentLoaded', function () {
                     }
                     countryItem += `</div>`;
 
-                    // добавление элементов
-                    elementForAppendChilds.insertAdjacentHTML('beforeend', countryItem);
+                    // первоначальные настройки для анимации списка стран/городов
+                    dropDown.style.position = 'absolute';
+                    if (this.cityOutputMode === 'default') {
+                        dropDown.style.left = '-40px';
+                    } else if (this.cityOutputMode === 'select') {
+                        dropDown.style.left = '40px';
+                    }
+                    dropDown.style.opacity = 0;
+                    
+                   // добавление элементов
+                   elementForAppendChilds.insertAdjacentHTML('beforeend', countryItem);
+
+                   // анимация списка
+                   let start = 0;
+                   let animation = setInterval(() => {
+                       if (start === 40) {
+                           clearInterval(animation);
+                           dropDown.style.position = 'relative';
+                           return;
+                       }
+                       draw(start);
+                       start++;
+                   }, 5);
+
+                   let draw = (counter) => {
+                    if (this.cityOutputMode === 'default') {
+                        dropDown.style.transform = `translateX(${counter}px)`;
+                    } else if (this.cityOutputMode === 'select') {
+                        dropDown.style.transform = `translateX(-${counter}px)`;
+                    }
+                        dropDown.style.opacity = counter / 40;
+                   };
 
                     // добавление слушателя на текущий элемент - государство
                     const newCountryElement = elementForAppendChilds
@@ -140,9 +180,37 @@ window.addEventListener('DOMContentLoaded', function () {
             } else {
                 if (data.length > 0 ) {
                     data.forEach((element, index) => {
+                        // выделение искомой подстроки в наименовании города
+                        let cityNameFirst = '',
+                        cityNameSecond = '',
+                        cityNameThird = '',
+                        cityResult = '';
+
+                        let firstSubstring = element.name.toLowerCase().indexOf(searchString.toLowerCase());
+                        
+                        let lastSubstring = element.name.toLowerCase()
+                        .indexOf(searchString.toLowerCase().substring(searchString.length - 1));
+
+                        // если искомая подстрока - в начале наименования города
+                        if (firstSubstring === 0) {
+                            cityNameFirst = element.name.substring(firstSubstring, lastSubstring + 1);
+                            if (lastSubstring < element.name.length) {
+                                cityNameSecond = element.name.substring(lastSubstring + 1);
+                            }
+                            cityResult = `<strong>${cityNameFirst}</strong>${cityNameSecond}`;
+                        // если подстрока в середине наименования города
+                        } else if (firstSubstring > 0) {
+                            cityNameFirst = element.name.substring(0, firstSubstring);
+                            cityNameSecond = searchString;
+                            const endSearchStringCurrent = cityNameFirst.length + searchString.length;
+                            if (lastSubstring < element.name.length) {
+                                cityNameThird = element.name.substring(endSearchStringCurrent);
+                            }
+                            cityResult = `${cityNameFirst}<strong>${cityNameSecond}</strong>${cityNameThird}`;
+                        }
                         let citiesItem = `<div class="dropdown-lists__countryBlock">
                                 <div class="dropdown-lists__line" data-url="${element.link}">
-                                <div class="dropdown-lists__city" data-url="${element.link}">${element.name}</div>
+                                <div class="dropdown-lists__city" data-url="${element.link}">${cityResult}</div>
                                 <div class="dropdown-lists__count" data-url="${element.link}">${element.count}</div>
                             </div>
                         </div>`;
