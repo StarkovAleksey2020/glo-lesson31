@@ -24,10 +24,15 @@ window.addEventListener('DOMContentLoaded', function () {
             this.cityOutputMode = 'default';
             this.searchCity = '';
             this.citiesBuf = [];
+            this.local = '';
+        }
+
+        getCitiesFromStorage() {
+            return localStorage.getItem('cities') ? JSON.parse(localStorage.getItem('cities')) : [];
         }
 
         // заполняем массив данных для показа
-        getCityBD(mode, country, searchString) {
+        getCityBD(mode, country, searchString, local) {
             this.citiesBuf = [];
 
             const statusMessage = document.createElement('div');
@@ -37,48 +42,112 @@ window.addEventListener('DOMContentLoaded', function () {
             statusMessage.classList.add('loader');
             button.appendChild(statusMessage);
           
-            const fetchPromise = fetch('./db_cities.json', {mode: 'cors'});
-            fetchPromise.then(response => {
-                if (response.status !== 200) {
-                  throw new Error(`Status: ${response.statusText}. Code: ${response.status}.`);
-                }
+            this.citiesArray = this.getCitiesFromStorage();
+
+            if (this.citiesArray === undefined || this.citiesArray.length === 0) {
+                const fetchPromise = fetch('./db_cities.json', {mode: 'cors'});
+                fetchPromise.then(response => {
+                    if (response.status !== 200) {
+                    throw new Error(`Status: ${response.statusText}. Code: ${response.status}.`);
+                    }
                 return response.json();
               }).then(cities => {
-                this.citiesArray = cities.RU;
-                setTimeout(() => {statusMessage.classList.remove('loader');}, 100);
 
-                // заполняем массив со всеми странами/городами
-                this.citiesArray.forEach((item, itemIndex) => {
-                    item.cities.sort(this.compareCount);
-                    let citiesArrayBuf = [];
-                    // перебор городов с фильтрацией по искомой подстроке и типу поиска
-                    for (let index = 0; index < item.cities.length; index++) {
-                        if ((this.cityOutputMode === 'default') ||
-                         (this.cityOutputMode === 'select' && itemIndex !== this.cityClickedIndex)) {
-                            if (index < 3) {
-                                citiesArrayBuf.push(item.cities[index]);
-                            }
-                        } else if (this.cityOutputMode === 'select' && itemIndex === this.cityClickedIndex) {
+                localStorage.setItem('cities', JSON.stringify(cities));
+
+                this.citiesArray = cities[local];
+                setTimeout(() => {statusMessage.classList.remove('loader');}, 100);
+                this.citiesArray = this.fillCitiesArray(this.citiesArray, searchString);
+
+                this.routeCitiesArray(this.citiesArray, searchString);
+              });
+            } else {
+                this.citiesArray = this.citiesArray[this.local];
+
+                // сортировка массива
+                this.citiesArray = this.sortArrayByLocal(this.citiesArray, this.local);
+
+                setTimeout(() => {statusMessage.classList.remove('loader');}, 100);
+                this.citiesArray = this.fillCitiesArray(this.citiesArray, searchString);
+
+
+                this.routeCitiesArray(this.citiesArray, searchString);
+
+            }
+        }
+
+        // сортировка массива по локали
+        sortArrayByLocal(array, locale) {
+            const countryArray = [
+                {"RU": [
+                    {"country": 
+                        ['РОССИЯ', 'RUSSIA', 'RUSSLAND']
+                    }
+                ],
+                "DE": [
+                    {"country":
+                        ['ГЕРМАНИЯ', 'GERMANY', 'DEUTSCHLAND']
+                    }
+                ],
+                "EN": [
+                    {"country":
+                        ['АНГЛИЯ', 'UNITED KINGDOM', 'ENGLAND']
+                    }
+                ]
+            }];
+            const localeArray = countryArray[0][locale][0].country;
+
+            let newArray = array.filter((item) => {
+                if (localeArray.includes(item.country.toUpperCase())) {
+                    return true;
+                }
+            });
+            const localCountry = newArray[0].country.toUpperCase();
+
+            array.forEach((item) => {
+                if (item.country.toUpperCase() !== localCountry) {
+                    newArray.push(item);
+                }
+            });
+            return newArray;
+        }
+        
+        // сборка массива стран/городов в зависимости от типа события
+        routeCitiesArray(array, searchString) {
+            // в зависимости от типа поиска передаем разные массивы в процедуру отрисовки элементов
+            if (this.cityOutputMode === 'default' || this.cityOutputMode === 'select') {
+                this.fillCountryList(array);
+            } else {
+                this.fillCountryList(this.citiesBuf, searchString);
+            }
+        }
+
+        // заполняем массив со всеми странами/городами
+        fillCitiesArray(array, searchString) {
+            array.forEach((item, itemIndex) => {
+                item.cities.sort(this.compareCount);
+                let citiesArrayBuf = [];
+                // перебор городов с фильтрацией по искомой подстроке и типу поиска
+                for (let index = 0; index < item.cities.length; index++) {
+                    if ((this.cityOutputMode === 'default') ||
+                        (this.cityOutputMode === 'select' && itemIndex !== this.cityClickedIndex)) {
+                        if (index < 3) {
                             citiesArrayBuf.push(item.cities[index]);
-                        } else if (this.cityOutputMode === 'autocomplete') {
-                            if (searchString.length > 0) {
-                                const currentCityItem = item.cities[index].name.toLowerCase();
-                                if (currentCityItem.indexOf(searchString) !== -1) {
-                                    this.citiesBuf.push(item.cities[index]);
-                                }
+                        }
+                    } else if (this.cityOutputMode === 'select' && itemIndex === this.cityClickedIndex) {
+                        citiesArrayBuf.push(item.cities[index]);
+                    } else if (this.cityOutputMode === 'autocomplete') {
+                        if (searchString.length > 0) {
+                            const currentCityItem = item.cities[index].name.toLowerCase();
+                            if (currentCityItem.indexOf(searchString) !== -1) {
+                                this.citiesBuf.push(item.cities[index]);
                             }
                         }
                     }
-                    item.cities = citiesArrayBuf;
-                });
-
-                // в зависимости от типа поиска передаем разные массивы в процедуру отрисовки элементов
-                if (this.cityOutputMode === 'default' || this.cityOutputMode === 'select') {
-                    this.fillCountryList(this.citiesArray);
-                } else {
-                    this.fillCountryList(this.citiesBuf, searchString);
                 }
-              });
+                item.cities = citiesArrayBuf;
+            });
+            return array;
         }
 
         // процедура очистки экранных элементов
@@ -263,15 +332,46 @@ window.addEventListener('DOMContentLoaded', function () {
                 closeButton.style.display = 'block';
                 this.cityOutputMode = 'select';
                 this.cityClickedIndex = countryIndex;
-                this.getCityBD(this.cityOutputMode, this.cityClickedIndex);
+                this.getCityBD(this.cityOutputMode, this.cityClickedIndex, '', this.local);
             });
+        }
+
+        // работа с локалью
+        createLocal() {
+            // проверяем наличие куки с локалью
+            const local = this.getCookie('local');
+            if (!local) {
+                // определяем локаль - если введено неверное значение - устанавливаем RU
+                let lang = prompt('Введите локаль (RU, EN, DE)', 'RU');
+                if (!['RU', 'EN', 'DE'].includes(lang.toUpperCase())) {
+                    lang = 'RU';
+                }
+    
+                // получаем последнюю дату года для занесения в куки
+                const today = new Date();
+                const expireDate = new Date('December 31, ' + today.getFullYear());
+    
+                // заносим куки
+                document.cookie = 'local=' + encodeURIComponent(lang) + '; expires=' + expireDate + '; secure';
+                this.local = lang;
+            } else {
+                this.local = local;
+            }
+        }
+
+        getCookie(name) {
+            let matches = document.cookie.match(new RegExp(
+              "(?:^|; )" + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + "=([^;]*)"
+            ));
+            return matches ? decodeURIComponent(matches[1]) : undefined;
         }
 
         // слушатели класса
         eventsListeners() {
             // на клик по полю input
             inputCity.addEventListener('click', () => {
-                this.getCityBD('default');
+            // получаем таблицу стран/городов в соотвествии с локалью
+            this.getCityBD('default','','', this.local);
             });
             // на ввод подстроки поиска городов
             inputCity.addEventListener('input', (e) => {
@@ -279,11 +379,11 @@ window.addEventListener('DOMContentLoaded', function () {
                 this.cityOutputMode = 'autocomplete';
                 this.cityClickedIndex = undefined;
                 if (searchString.length > 0) {
-                    this.getCityBD(this.cityOutputMode, undefined, searchString);
+                    this.getCityBD(this.cityOutputMode, undefined, searchString, this.local);
                 } else {
                     this.clearLists();
                     this.cityOutputMode = 'default';
-                    this.getCityBD(this.cityOutputMode);
+                    this.getCityBD(this.cityOutputMode,'','', this.local);
                 }
             });
             closeButton.addEventListener('click', (e) => {
@@ -294,7 +394,7 @@ window.addEventListener('DOMContentLoaded', function () {
                 button.disabled = true;
                 this.clearLists();
                 this.cityOutputMode = 'default';
-                this.getCityBD(this.cityOutputMode);
+                this.getCityBD(this.cityOutputMode,'','', this.local);
             });
         }
     }
@@ -302,6 +402,9 @@ window.addEventListener('DOMContentLoaded', function () {
     const cityObj = new City();
     inputCity.value = '';
     button.disabled = true;
+
+    cityObj.createLocal();
+
     cityObj.eventsListeners();
 
 });
